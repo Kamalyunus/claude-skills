@@ -1,6 +1,6 @@
 ---
 name: eda
-description: "Use this skill whenever the user wants to explore, profile, or understand a dataset. This includes requests to: perform exploratory data analysis (EDA), profile a dataset, understand data quality, find patterns or anomalies, check distributions, assess feature relationships, or prepare data understanding before modeling. Trigger when the user uploads a CSV, Excel, Parquet, or other tabular data file and asks anything like 'analyze this data', 'what does this dataset look like', 'EDA', 'data profiling', 'explore this', 'tell me about this data', 'check data quality', or 'summarize this dataset'. Also trigger when the user explicitly mentions EDA or exploratory analysis even without uploading a file yet. Do NOT trigger for pure modeling/ML tasks, dashboard building, or ETL pipeline creation — only for the exploratory understanding phase."
+description: "Use this skill whenever the user wants to explore, profile, or understand a tabular dataset for general data science or ML purposes. This includes requests to: perform exploratory data analysis (EDA), profile a dataset, understand data quality, find patterns or anomalies, check distributions, assess feature relationships, or prepare data understanding before modeling. Trigger when the user uploads a CSV, Excel, Parquet, or other tabular data file and asks anything like 'analyze this data', 'what does this dataset look like', 'EDA', 'data profiling', 'explore this', 'tell me about this data', 'check data quality', or 'summarize this dataset'. Also trigger when the user explicitly mentions EDA or exploratory analysis even without uploading a file yet. Do NOT trigger for: pure modeling/ML tasks, dashboard building, ETL pipeline creation, or any demand/sales forecasting, time series forecasting, or retail/supply chain analysis — use the forecasting/ skill for those instead."
 ---
 
 # EDA Skill — Exploratory Data Analysis
@@ -51,6 +51,8 @@ for col in df.columns:
             print(f"  Potential datetime column: {col}")
 ```
 
+> **Forecasting redirect:** If the dataset looks like a demand/sales time series (date column + quantity/revenue + SKU/store/product entity columns) and the user's goal is prediction or forecasting, **stop and recommend the `forecasting/` skill instead** — it has dedicated modules for stationarity, seasonality, intermittency, walk-forward CV, and model selection that this skill does not cover.
+
 ### Step 1B: Ask Targeted Questions
 
 Based on the quick scan, ask the user **up to 5 focused questions**. Use the `ask_user_input` tool for discrete choices; prose for open-ended questions.
@@ -99,7 +101,7 @@ There are two tiers: **Core** modules run on every dataset. **Conditional** modu
 
 | # | Module | Include When | What It Determines |
 |---|--------|-------------|---------------------|
-| 8 | **Temporal / Drift Analysis** | Datetime columns exist | Stationarity, drift, time-based split needs |
+| 8 | **Distribution Drift Analysis** | Datetime columns exist AND goal is classification/regression (not forecasting) | Feature distribution shift over time, PSI/KS drift scores, time-based split needs |
 | 9 | **Categorical Deep-Dive + IV/WoE** | Key categoricals + classification target | Encoding strategy, binning, predictive power |
 | 10 | **Feature Engineering Signals** | Modeling is the goal | Transforms, interactions, aggregations |
 | 11 | **Segmentation Patterns** | Natural groupings exist | Group-level differences, stratification needs |
@@ -117,7 +119,7 @@ Present as a concise numbered list with *why* each module matters for this speci
 > 4. **Target + Leakage Scan** — Feature importance for churn, flag features unavailable at prediction time
 > 5. **Correlation** — 15 numeric features, check for redundancy
 > 6. **Outliers** — Age has suspicious values; monetary features have real long-tail
-> 7. **Drift** — 2 years of data; check if distributions shifted
+> 7. **Distribution Drift** — 2 years of data; check if feature distributions shifted (training vs. recent data)
 > 8. **IV/WoE** — Binning and predictive power for categorical features
 > 9. **Modeling Readiness** — CV strategy, class imbalance plan, model family rec
 >
@@ -183,7 +185,7 @@ PLOT_DIR.mkdir(exist_ok=True)
 4. Target Analysis & Leakage Scan
 5. Correlation & Multicollinearity
 6. Outlier Detection
-7. Temporal / Drift Analysis
+7. Distribution Drift Analysis
 8. Categorical Deep-Dive + IV/WoE
 9. Feature Engineering Signals
 10. Segmentation Patterns
@@ -224,10 +226,10 @@ Generate a polished, self-contained HTML report. Read `references/report-templat
    - Correlation heatmap (Spearman)
    - High-correlation pairs + VIF flags
 
-6. Temporal / Drift Analysis (if applicable)
-   - Trend visualizations
+6. Distribution Drift Analysis (if applicable)
+   - Feature distribution over time (train era vs. recent)
    - PSI / KS drift scores per feature
-   - Stationarity findings
+   - Time-based split recommendation
 
 7. Outlier Analysis
    - Multi-method table (IQR + Z-score)
@@ -269,10 +271,12 @@ Generate a polished, self-contained HTML report. Read `references/report-templat
 - Test if missingness is predictive (is_missing as feature)
 - Recommend multiple imputation with uncertainty quantification
 
-### Time Series / Panel Data
-- Detect panel structure (entity × time), flag for grouped CV
-- Check for temporal gaps, test stationarity (ADF)
-- Always recommend time-based CV split
+### Time-Ordered Data (Non-Forecasting)
+- If the user's goal involves predicting future demand, sales, or any quantity along a time axis, **redirect to the `forecasting/` skill** — it has the right modules (stationarity, seasonality, intermittency, walk-forward CV, baseline benchmarking).
+- If the data has a time column but the task is classification/regression on static snapshots (e.g., predicting customer churn using historical features), stay in this skill:
+  - Detect panel structure (entity × time), flag for grouped CV
+  - Check for distribution drift across time periods (PSI / KS)
+  - Recommend time-based train/test split to prevent leakage
 
 ### Imbalanced Classification (<5% minority)
 - Report baseline accuracy and precision/recall tradeoffs
@@ -297,3 +301,4 @@ Generate a polished, self-contained HTML report. Read `references/report-templat
 - Don't forget leakage detection — #1 cause of prod failures
 - Don't produce recommendations without effort estimates
 - Don't bury the modeling roadmap — it's the reason the EDA exists
+- Don't run deep time series analysis (stationarity tests, STL decomposition, seasonality detection, intermittency classification) — that belongs in the `forecasting/` skill
